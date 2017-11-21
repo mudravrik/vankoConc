@@ -1,0 +1,10 @@
+---
+title: "Vancomycine cincentration analysis"
+author: Ivan Tsarev, <mudravr@gmail.com>
+output: html_notebook
+---
+
+```{r}
+main = read.csv("data_utf.csv", sep = ";", dec = ",", stringsAsFactors = TRUE)
+```
+
