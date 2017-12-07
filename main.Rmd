@@ -1,10 +1,160 @@
 ---
-title: "Vancomycine cincentration analysis"
-author: Ivan Tsarev, <mudravr@gmail.com>
-output: html_notebook
+title: "Vancomycine concentration analysis"
+author: "Ivan Tsarev, <mudravr@gmail.com>"
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r}
-main = read.csv("data_utf.csv", sep = ";", dec = ",", stringsAsFactors = TRUE)
+library(stringr)
+library(vioplot)
+library(xlsx)
 ```
+
+
+```{r}
+main = read.csv("data_utf.csv", sep = ";", dec = ",", stringsAsFactors = TRUE)
+main$daily_dose[main$daily_dose == 100 | main$daily_dose == 1500] = 1000
+source("functions.R")
+```
+
+```{r}
+concdata1 = main[,c("case","gender","age","weight","height","creat", "creat2","CC3", "daily_dose","cpeak1","trough1","cpeak2","trough2")]
+
+
+concdata1$inf_time = as.numeric(concdata1$daily_dose)/1000
+
+concdata1$clearace1 = sapply(1:nrow(concdata1),
+                            function(x){
+                              creat_calc(age = concdata1$age[x], weight = concdata1$weight[x], gender = concdata1$gender[x], creat = concdata1$creat[x])
+                            })
+concdata1$clearace2 = sapply(1:nrow(concdata1),
+                            function(x){
+                              creat_calc(age = concdata1$age[x], weight = concdata1$weight[x], gender = concdata1$gender[x], creat = concdata1$creat2[x])
+                            })
+concdata1$clearace3 = concdata1$CC3
+
+concdata1$kel_clear1 = sapply(concdata1$clearace1,
+                             function(x){
+                               0.00083 * x + 0.0044
+                             })
+concdata1$kel_clear2 = sapply(concdata1$clearace2,
+                             function(x){
+                               0.00083 * x + 0.0044
+                             })
+
+concdata1$kel_clear3 = sapply(concdata1$clearace3,
+                             function(x){
+                               0.00083 * x + 0.0044
+                             })
+
+
+concdata1$kel_conc2 = sapply(1:nrow(concdata1),
+                            function(x){
+                              kel_conc(peak = concdata1$cpeak1[x], trough = concdata1$trough1[x], gap = 10)
+                            })
+concdata1$kel_conc3 = sapply(1:nrow(concdata1),
+                            function(x){
+                              kel_conc(peak = concdata1$cpeak2[x], trough = concdata1$trough2[x], gap = 10)
+                            })
+concdata1$vd = concdata1$weight * 0.7
+
+
+
+concdata1$peak_clear2 = concdata1$daily_dose * (1 - exp(- concdata1$kel_clear2 * concdata1$inf_time)) / (concdata1$inf_time * concdata1$vd * concdata1$kel_clear2 * (1 - exp(-concdata1$kel_clear2 * 12)))
+
+concdata1$trough_clear2 = concdata1$peak_clear2 * exp(-concdata1$kel_clear2 * (10 - concdata1$inf_time)) 
+
+
+concdata1$lin_trap_clear2 = (concdata1$peak_clear2 + concdata1$trough_clear2) * concdata1$inf_time / 2
+
+concdata1$log_trap_clear2 = (concdata1$peak_clear2 - concdata1$trough_clear2)*(12 - concdata1$inf_time)/log(concdata1$peak_clear2 / concdata1$trough_clear2)
+concdata1$auc_clear2 = (concdata1$lin_trap_clear2 + concdata1$log_trap_clear2) * 2
+
+concdata1$peak_clear3 = concdata1$daily_dose * (1 - exp(- concdata1$kel_clear3 * concdata1$inf_time)) / (concdata1$inf_time * concdata1$vd * concdata1$kel_clear3 * (1 - exp(-concdata1$kel_clear3 * 12)))
+
+concdata1$trough_clear3 = concdata1$peak_clear3 * exp(-concdata1$kel_clear3 * (10 - concdata1$inf_time)) 
+
+
+concdata1$lin_trap_clear3 = (concdata1$peak_clear3 + concdata1$trough_clear3) * concdata1$inf_time / 2
+
+concdata1$log_trap_clear3 = (concdata1$peak_clear3 - concdata1$trough_clear3)*(12 - concdata1$inf_time)/log(concdata1$peak_clear3 / concdata1$trough_clear3)
+concdata1$auc_clear3 = (concdata1$lin_trap_clear3 + concdata1$log_trap_clear3) * 2
+
+
+
+
+concdata1$lin_trap_conc2 = (concdata1$cpeak1 + concdata1$trough1) * concdata1$inf_time / 2
+
+concdata1$log_trap_conc2 = (concdata1$cpeak1 - concdata1$trough1)*(12 - concdata1$inf_time)/log(concdata1$cpeak1 / concdata1$trough1)
+concdata1$auc_conc2 = (concdata1$lin_trap_conc2 + concdata1$log_trap_conc2) * 2
+
+concdata1$lin_trap_conc3 = (concdata1$cpeak2 + concdata1$trough2) * concdata1$inf_time / 2
+
+concdata1$log_trap_conc3 = (concdata1$cpeak2 - concdata1$trough2)*(12 - concdata1$inf_time)/log(concdata1$cpeak2 / concdata1$trough2)
+concdata1$auc_conc3 = (concdata1$lin_trap_conc3 + concdata1$log_trap_conc3) * 2
+```
+
+```{r fig.height=8}
+par(mar = c(3,5,3,1))
+boxplot(concdata1$auc_clear2, concdata1$auc_conc2, main = "AUC расчитанный по креатинину и по концентрациям \n для первой пробы", ylab = "AUC, мкг/ч/мл", names = c("По креатинину", "По концентрациям"))
+```
+
+```{r}
+wilcox.test(concdata1$auc_conc2, concdata1$auc_clear2)
+```
+
+
+
+
+```{r fig.width=8}
+par(mar = c(3,5,3,1))
+boxplot(concdata1$auc_clear3, concdata1$auc_conc3, main = "AUC расчитанный по креатинину и по концентрациям \n для второй пробы", ylab = "AUC, мкг/ч/мл", names = c("По креатинину", "По концентрациям"))
+```
+
+
+```{r}
+wilcox.test(concdata1$auc_conc3, concdata1$auc_clear3)
+```
+
+
+
+
+
+
+
+
+```{r fig.width=8}
+par(mar = c(3,5,3,1))
+boxplot(concdata1$trough_clear2, concdata1$trough1, main = "Остаточная концентрация, расчитанная по креатинину \n и по концентрациям для первой пробы", ylab = "C, мкг/мл", names = c("По креатинину", "По концентрациям"))
+```
+
+```{r}
+wilcox.test(concdata1$trough_clear2, concdata1$trough1)
+```
+
+```{r fig.width=8}
+par(mar = c(3,5,3,1))
+boxplot(concdata1$trough_clear3, concdata1$trough2, main = "Остаточная концентрация, расчитанная по креатинину \n и по концентрациям для второй пробы", ylab = "C, мкг/мл", names = c("По креатинину", "По концентрациям"))
+```
+
+
+
+```{r}
+wilcox.test(concdata1$trough_clear3, concdata1$trough2)
+```
+
+```{r fig.height=6, fig.width=6}
+plot(concdata1$auc_clear2, concdata1$auc_conc2, main = "Соотношение между рассчитанной по креатинину \nи измеренной AUC для первой пробы", xlab = "AUC по креатинину, мкг/ч/мл", ylab = "AUC по концентрации, мкг/ч/мл")
+```
+
+
+
+
+```{r fig.height=6, fig.width=6}
+plot(concdata1$auc_clear3, concdata1$auc_conc3, main = "Соотношение между рассчитанной по креатинину \nи измеренной AUC для первой пробы", xlab = "AUC по креатинину, мкг/ч/мл", ylab = "AUC по концентрации, мкг/ч/мл")
+```
+
+
 
